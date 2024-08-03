@@ -3,10 +3,12 @@ import re
 from pathlib import Path
 
 import telebot
-import pytesseract
 from PIL import Image
 
+import pytesseract
+
 from config import TOKEN
+
 
 Path('photos').mkdir(exist_ok=True)
 
@@ -14,7 +16,9 @@ ARROW_SYMBOL = '\u2198\uFE0F'
 
 bot = telebot.TeleBot(TOKEN)
 
-telebot.logging.basicConfig(filename='log.csv', level=logging.INFO, encoding='utf-8',
+telebot.logging.basicConfig(filename='log.csv',
+                            level=logging.INFO,
+                            encoding='utf-8',
                             format=' %(asctime)s; %(levelname)s; %(message)s')
 
 logger = telebot.logger
@@ -47,7 +51,9 @@ def start_message(message):
 def photo_message(message):
     log_message(message, message.text)
     bot.send_message(
-        message.chat.id, f'Пришлите фото для определения состава продуктов {ARROW_SYMBOL}')
+        message.chat.id,
+        f'Пришлите фото для определения состава продуктов {ARROW_SYMBOL}'
+    )
 
 
 @bot.message_handler(content_types=['photo'])
@@ -62,9 +68,13 @@ def photo_reply(message):
 
     text = pytesseract.image_to_string(Image.open(file_name), lang='rus')
 
-    cleaned_text = re.sub(r'[^\w\s]', '', text)
-    words = re.findall(r'\b\w+\b', cleaned_text)
-    bot.reply_to(message, '\n'.join(words))
+    text = re.sub(r'-\n', '', text)
+    text = re.sub(r'\n', ' ', text)
+    text = re.sub(r'\s-\s', ':', text)
+    cleaned_text = re.sub(r'[^\w\s\-,\.;\:\(\)\[\]]', '', text)
+    ingredients = [item.strip().lower()
+                   for item in re.split(r'[,\.;\:\(\)\[\]]+', cleaned_text)]
+    bot.reply_to(message, '\n'.join(ingredients))
 
 
 @bot.message_handler(content_types=['text'])
