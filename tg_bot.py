@@ -41,6 +41,17 @@ def log_message(msg, txt):
     })
 
 
+def find_partial_matches(list1, list2):
+    matches = set()
+
+    for elem1 in list1:
+        for elem2 in list2:
+            if elem1 in elem2:
+                matches.add(elem2)
+
+    return matches
+
+
 @bot.message_handler(commands=['start'])
 def start_message(message):
     log_message(message, message.text)
@@ -68,13 +79,30 @@ def photo_reply(message):
 
     text = pytesseract.image_to_string(Image.open(file_name), lang='rus')
 
-    text = re.sub(r'-\n', '', text)
+    log_message(message, 'text:\n' + text)
+
+    text = re.sub(r'[-–—]+\s*\|*\n+\s*', '', text)
     text = re.sub(r'\n', ' ', text)
-    text = re.sub(r'\s-\s', ':', text)
-    cleaned_text = re.sub(r'[^\w\s\-,\.;\:\(\)\[\]]', '', text)
+    text = re.sub(r'\s[-–—]\s', ':', text)
+    cleaned_text = re.sub(r'[^\w\s\-\–\—,\.;\:\(\)\[\]]', '', text)
     ingredients = [item.strip().lower()
                    for item in re.split(r'[,\.;\:\(\)\[\]]+', cleaned_text)]
-    bot.reply_to(message, '\n'.join(ingredients))
+
+    log_message(message, 'ingredients:\n' + '\n'.join(ingredients))
+
+    with open('stoplist.txt', 'r', encoding='utf-8') as file:
+        stoplist = [line.strip().lower() for line in file.readlines()]
+
+    if matches := find_partial_matches(stoplist, ingredients):
+        sorted_matches_string = ',\n'.join(sorted(matches))
+        reply = (
+            f'К сожалению, в составе есть запрещенные ингредиенты:\n\n'
+            f'`{sorted_matches_string}`'
+        )
+    else:
+        reply = 'Все ингредиенты в составе разрешены'
+
+    bot.reply_to(message, reply, parse_mode='MarkdownV2')
 
 
 @bot.message_handler(content_types=['text'])
