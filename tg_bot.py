@@ -52,6 +52,18 @@ def find_partial_matches(list1, list2):
     return matches
 
 
+def find_word_matches(list1, list2):
+    matches = set()
+
+    for word in list1:
+        pattern = re.compile(rf'\b{word}\b')
+        for item in list2:
+            if pattern.search(item):
+                matches.add(item)
+
+    return matches
+
+
 @bot.message_handler(commands=['start'])
 def start_message(message):
     log_message(message, message.text)
@@ -84,6 +96,7 @@ def photo_reply(message):
     text = re.sub(r'[-–—]+\s*\|*\n+\s*', '', text)
     text = re.sub(r'\n', ' ', text)
     text = re.sub(r'\s[-–—]\s', ':', text)
+    text = re.sub(r'^[eе][-–—]*(?=\d)', 'е', text)
     cleaned_text = re.sub(r'[^\w\s\-\–\—,\.;\:\(\)\[\]]', '', text)
     ingredients = [item.strip().lower()
                    for item in re.split(r'[,\.;\:\(\)\[\]]+', cleaned_text)]
@@ -93,7 +106,8 @@ def photo_reply(message):
     with open('stoplist.txt', 'r', encoding='utf-8') as file:
         stoplist = [line.strip().lower() for line in file.readlines()]
 
-    if matches := find_partial_matches(stoplist, ingredients):
+    # if matches := find_partial_matches(stoplist, ingredients):
+    if matches := find_word_matches(stoplist, ingredients):
         sorted_matches_string = ',\n'.join(sorted(matches))
         reply = (
             f'К сожалению, в составе есть запрещенные ингредиенты:\n\n'
