@@ -27,7 +27,7 @@ logger.setLevel(logging.INFO)
 bot.set_my_commands(
     commands=[
         telebot.types.BotCommand('start', 'начало работы'),
-        telebot.types.BotCommand('photo', 'отправить фото состава')
+        # telebot.types.BotCommand('photo', 'отправить фото состава')
     ],
 )
 
@@ -39,6 +39,18 @@ def log_message(msg, txt):
         'full_name': msg.from_user.full_name,
         'txt': txt
     })
+
+
+def get_ingredients(text):
+    text = re.sub(r'[-–—]+\s*\|*\n+\s*', '', text)
+    text = re.sub(r'\n', ' ', text)
+    text = re.sub(r'\s[-–—]\s', ':', text)
+    text = re.sub(r'^[eе][-–—]*(?=\d)', 'е', text)
+    cleaned_text = re.sub(r'[^\w\s\-\–\—,\.;\:\(\)\[\]]', '', text)
+    ingredients = [item.strip().lower()
+                   for item in re.split(r'[,\.;\:\(\)\[\]]+', cleaned_text)]
+
+    return ingredients
 
 
 def find_partial_matches(list1, list2):
@@ -64,10 +76,44 @@ def find_word_matches(list1, list2):
     return matches
 
 
+def get_reply(message, ingredients):
+    with open('stoplist_forms_lg.txt', 'r', encoding='utf-8') as file:
+        stoplist = [line.strip().lower()
+                    for line in file.readlines() if line.strip()]
+
+    with open('exceptions_sm_forms.txt', 'r', encoding='utf-8') as file:
+        stoplist.extend([line.strip().lower()
+                         for line in file.readlines() if line.strip()])
+
+    with open('exceptions_md_forms.txt', 'r', encoding='utf-8') as file:
+        stoplist.extend([line.strip().lower()
+                         for line in file.readlines() if line.strip()])
+
+    with open('exceptions.txt', 'r', encoding='utf-8') as file:
+        stoplist.extend([line.strip().lower()
+                         for line in file.readlines() if line.strip()])
+
+    reply = f'Распознано слов/словосочетаний: {len(ingredients)}\n\n'
+
+    # if matches := find_partial_matches(stoplist, ingredients):
+    if matches := find_word_matches(stoplist, ingredients):
+        sorted_matches_string = ',\n'.join(sorted(matches))
+        reply += (
+            f'К сожалению, в составе есть запрещенные ингредиенты:\n\n'
+            f'`{sorted_matches_string}`'
+        )
+        log_message(message, f'result:\n{sorted_matches_string}')
+    else:
+        reply += 'Все ингредиенты в составе разрешены'
+    return reply
+
+
 @bot.message_handler(commands=['start'])
 def start_message(message):
     log_message(message, message.text)
-    bot.send_message(message.chat.id, 'Готов к работе!')
+    with open('hello.md', 'r', encoding='utf-8') as file:
+        hello_text = file.read()
+    bot.send_message(message.chat.id, hello_text)
 
 
 @bot.message_handler(commands=['photo'])
@@ -93,28 +139,9 @@ def photo_reply(message):
 
     log_message(message, 'text:\n' + text)
 
-    text = re.sub(r'[-–—]+\s*\|*\n+\s*', '', text)
-    text = re.sub(r'\n', ' ', text)
-    text = re.sub(r'\s[-–—]\s', ':', text)
-    text = re.sub(r'^[eе][-–—]*(?=\d)', 'е', text)
-    cleaned_text = re.sub(r'[^\w\s\-\–\—,\.;\:\(\)\[\]]', '', text)
-    ingredients = [item.strip().lower()
-                   for item in re.split(r'[,\.;\:\(\)\[\]]+', cleaned_text)]
-
+    ingredients = get_ingredients(text)
     log_message(message, 'ingredients:\n' + '\n'.join(ingredients))
-
-    with open('stoplist.txt', 'r', encoding='utf-8') as file:
-        stoplist = [line.strip().lower() for line in file.readlines()]
-
-    # if matches := find_partial_matches(stoplist, ingredients):
-    if matches := find_word_matches(stoplist, ingredients):
-        sorted_matches_string = ',\n'.join(sorted(matches))
-        reply = (
-            f'К сожалению, в составе есть запрещенные ингредиенты:\n\n'
-            f'`{sorted_matches_string}`'
-        )
-    else:
-        reply = 'Все ингредиенты в составе разрешены'
+    reply = get_reply(message, ingredients)
 
     bot.reply_to(message, reply, parse_mode='MarkdownV2')
 
@@ -122,7 +149,12 @@ def photo_reply(message):
 @bot.message_handler(content_types=['text'])
 def message_reply(message):
     log_message(message, message.text)
-    bot.send_message(message.chat.id, 'Неизвестная команда')
+
+    ingredients = get_ingredients(message.text)
+    log_message(message, 'ingredients:\n' + '\n'.join(ingredients))
+    reply = get_reply(message, ingredients)
+
+    bot.reply_to(message, reply, parse_mode='MarkdownV2')
 
 
 bot.infinity_polling()
